@@ -1,0 +1,204 @@
+﻿@page "/fetchdata"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@using EndToEndWebAssembly.Shared
+@inject HttpClient Http
+@inject AuthenticationStateProvider AuthenticatetionStateProvider
+
+<PageTitle>Weather forecast</PageTitle>
+
+<h1>Weather forecast</h1>
+
+<p>This component demonstrates fetching data from the server.</p>
+
+<AuthorizeView>
+    <Authorized>
+        @if (forecasts == null)
+        {
+            <p><em>Loading...</em></p>
+        }
+        else
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Temp. (C)</th>
+                        <th>Temp. (F)</th>
+                        <th>Summary</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var forecast in forecasts)
+                    {
+                        <tr>
+                            <td>
+                                @((forecast.Date != null)
+                                    ? forecast.Date.Value.ToShortDateString()
+                                    : "")
+                            </td>
+                            <td>@forecast.TemperatureC</td>
+                            <td>@forecast.TemperatureF</td>
+                            <td>@forecast.Summary</td>
+                            <td>
+                                <!-- Edit the current forecast -->
+                                <button class="btn btn-primary"
+                                @onclick="(() =>
+                                                  EditForecast(forecast))">
+                                    Edit
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <p>
+                <!-- Add a new forecast -->
+                <button class="btn btn-primary"
+                @onclick="AddNewForecast">
+                    Add New Forecast
+                </button>
+            </p>
+            @if (ShowPopup)
+            {
+                <!-- This is the popup to create or edit a forecast -->
+                <div class="modal" tabindex="-1" style="display:block" 
+                     role="dialog">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3 class="modal-title">Edit Forecast</h3>
+                                <!-- Button to close the popup -->
+                                <button type="button" class="close"
+                                        @onclick="ClosePopup">
+                                    <span aria-hidden="true">X</span>
+                                </button>
+                            </div>
+                            <!-- Edit form for the current forecast -->
+                            <div class="modal-body">
+                                <input class="form-control" type="text"
+                                       placeholder="Celsius forecast"
+                                @bind="ObjweatherForecastDTO
+                                              .TemperatureC" />
+                                <input class="form-control" type="text"
+                                       placeholder="Fahrenheit forecast"
+                                @bind="ObjweatherForecastDTO
+                                              .TemperatureF" />
+                                <input class="form-control" type="text"
+                                       placeholder="Summary"
+                                @bind="ObjweatherForecastDTO.Summary" />
+                                <br />
+                                <!-- Button to save the forecast -->
+                                <button class="btn btn-primary"
+                                        @onclick="SaveForecast">
+                                    Save
+                                </button>
+                                <!-- Only show button if not a new record -->
+                                @if (ObjweatherForecastDTO.Id > 0)
+                                {
+                                    <!-- Button to delete the forecast -->
+                                    <button class="btn btn-primary"
+                                            @onclick="@(() => DeleteForecast())">
+                                        Delete
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </Authorized>
+    <NotAuthorized>
+        <p>You're not signed in.</p>
+    </NotAuthorized>
+</AuthorizeView>
+
+
+
+
+
+@code {
+
+    [CascadingParameter]
+    private Task<AuthenticationState> authenticationStateTask { get; set; }
+
+    private List<WeatherForecastDTO> forecasts;
+    WeatherForecastDTO ObjweatherForecastDTO = new();
+    bool ShowPopup = false; 
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await authenticationStateTask;
+            var user = authState.User;
+            if (user.Identity != null)
+            {
+                if (user.Identity.IsAuthenticated)
+                {
+                    forecasts = await Http.GetFromJsonAsync<List<WeatherForecastDTO>>("/api/weatherForecast/GetAsync");
+                }
+            }
+        }
+        catch (AccessTokenNotAvailableException exception)
+        {
+            exception.Redirect();
+        }
+    }
+    void ClosePopup()
+    {
+        // Close the Popup
+        ShowPopup = false;
+    }
+    void AddNewForecast()
+    {
+        ObjweatherForecastDTO = new();
+        ObjweatherForecastDTO.Id = 0;
+        ShowPopup = true;
+    }
+    void EditForecast(WeatherForecastDTO weatherForecastDTO)
+    {
+        ObjweatherForecastDTO = weatherForecastDTO;
+        ShowPopup = true;
+    }
+
+    async Task DeleteForecast()
+    {
+        ShowPopup = false;
+        await Http.DeleteAsync("/api/weatherForecast/Delete/" + Convert.ToInt32(ObjweatherForecastDTO.Id));
+        forecasts = await Http.GetFromJsonAsync<List<WeatherForecastDTO>>("/api/weatherForecast/GetAsync");
+    }
+
+    async Task SaveForecast()
+    {
+        ShowPopup = false;
+        var user = (await authenticationStateTask).User;
+        if (ObjweatherForecastDTO.Id ==0)
+        {
+            // Create new forecast
+            WeatherForecastDTO objNewWeatherForecastDTO =
+                new WeatherForecastDTO();
+            objNewWeatherForecastDTO.Date =
+                System.DateTime.Now;
+            objNewWeatherForecastDTO.Summary =
+                ObjweatherForecastDTO.Summary;
+            objNewWeatherForecastDTO.TemperatureC =
+            Convert.ToInt32(ObjweatherForecastDTO.TemperatureC);
+            objNewWeatherForecastDTO.TemperatureF =
+            Convert.ToInt32(ObjweatherForecastDTO.TemperatureF);
+            // Username will be set server side
+            objNewWeatherForecastDTO.UserName = "";
+            // Save the result
+            await Http.PostAsJsonAsync(
+                "/api/WeatherForecast/Post",
+                objNewWeatherForecastDTO);
+        }
+        else
+        {
+            await Http.PutAsJsonAsync("/api/weatherForecast/Put", ObjweatherForecastDTO);
+        }
+
+        forecasts = await Http.GetFromJsonAsync<List<WeatherForecastDTO>>("/api/weatherForecast/GetAsync");
+    }
+}
