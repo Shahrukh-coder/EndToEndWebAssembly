@@ -67,6 +67,7 @@ namespace EndToEndWebAssembly.Server.Controllers
             weatherForecast.Summary = paramWeatherForecast.Summary;
             weatherForecast.Id = paramWeatherForecast.Id;
             weatherForecast.Date = paramWeatherForecast.Date;
+            weatherForecast.UserName = strCurrentUserr;
             _context.WeatherForecast.Add(weatherForecast);
             _context.SaveChanges();
         }
